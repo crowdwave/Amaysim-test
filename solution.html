@@ -141,7 +141,6 @@ class ShoppingCart {
 var messagesDiv = document.getElementById('messagesDiv')
 function assert( expected, got, description ) {
     let li = document.createElement('li')
-    //let result = test ? 'pass' : 'fail';
     let result = (expected === got) ? 'pass' : 'fail'
     li.appendChild(document.createTextNode( `${description}: expected: ${expected} got: ${got} ${result}`))
     messagesDiv.appendChild(li)
