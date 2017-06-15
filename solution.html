@@ -1,0 +1,208 @@
+right click and "view page source" to see full solution.<br/><br/><br/>
+
+see notes at <a href="https://crowdwave.github.io/Amaysim-test/index.html">https://crowdwave.github.io/Amaysim-test/index.html</a> for an explanation and also to understand why one of the tests fails.
+
+<div id="messagesDiv"/>
+
+<script>
+let promoCodes = {}
+promoCodes["I<3AMAYSIM"] = 10
+
+let pricingRules = {}
+pricingRules['ult_small'] = {
+    productCode: 'ult_small',
+    productName: 'Unlimited 1GB',
+    price: {1: 24.90},
+    freebiesPer: 2,
+    freebieProductCode: 'ult_small',
+
+  }
+pricingRules['ult_medium'] = {
+    productCode: 'ult_medium',
+    productName: 'Unlimited 2GB',
+    price: {1: 29.90},
+    freebiesPer: 1,
+    freebieProductCode: '1gb',
+  }
+pricingRules['ult_large'] = {
+    productCode: 'ult_large',
+    productName: 'Unlimited 5GB',
+    price: {1: 44.90, 4: 39.90},
+    freebiesPer: 0,
+    freebieProductCode: '',
+  }
+pricingRules['1gb'] = {
+    productCode: '1gb',
+    productName: '1 GB Data-pack',
+    price: {1: 9.90},
+    freebiesPer: 0,
+    freebieProductCode: '',
+  }
+
+class ShoppingCart {
+
+  constructor(pricingRules) {
+    this.pricingRules = pricingRules
+    this.cartItems = {}
+    this.checkoutItems = {}
+    this.promoCodes = promoCodes
+    this.promoCode = null
+  }
+
+  add(productCode, promoCode) {
+    // if we got a promo code then set it for the entire order
+    if (!!promoCode) {
+        // make sure the promoCode exists
+        if (Object.keys(this.promoCodes).indexOf(promoCode) === -1) {return new Error(`unknown promo code: ${promoCode}`)}
+        // promoCode exists, set it for the entire transaction
+        this.promoCode = promoCode
+    }
+    // make sure the product being added exists in our pricingRules
+    if (Object.keys(this.pricingRules).indexOf(productCode) === -1) {return new Error(`unknown product code: ${productCode}`)}
+    // if this product code is not yet in the cart then initalize it
+    if (!this.cartItems[productCode]) {this.cartItems[productCode] = {units: 0}}
+    // each time this method is called, increment the number of units
+    this.cartItems[productCode].units = ++this.cartItems[productCode].units
+    // get the per unit price for this product code based on the number of units in the cart
+    let itemprice = this.calculateItemprice(productCode, this.cartItems[productCode].units)
+    // calculate the total item price based on the current number of units that the customer has chosen
+    this.cartItems[productCode].totalprice = itemprice * this.cartItems[productCode].units
+  }
+
+  calculateItemprice(productCode, numunits) {
+    //returns the price of an item, given a certain number of units
+
+    /*
+    to find the price for a given number of units, we first need to sort the scale of units
+    starting at the highest unitpriceBreak, we compare the number of units to each unitpriceBreak
+    we have found the correct price in the first case where the number of units is equal to or greater than the unitprice
+     */
+
+    // we need an array of integers and JavaScript object keys are strings so convert the array of keys to integers
+    let unitpriceBreaks = Object.keys(this.pricingRules[productCode].price).map(x => parseInt(x))
+    // and of course the JavaScript sort is alphabetical not numeric so we need our own sort
+    unitpriceBreaks.sort((a,b) => a - b)
+    // we need to compare from high to low, and it's easier to understand by reversing the array than inverting the loop
+    unitpriceBreaks.reverse()
+      for (let i = 0; i < unitpriceBreaks.length; i++) {
+          if (numunits >= parseInt(unitpriceBreaks[i])) {
+            return this.pricingRules[productCode].price[parseInt(unitpriceBreaks[i])]
+          }
+    }
+  }
+
+  buildCheckOutItems() {
+    // checkoutItems combines the paid-for product items that the customer has chosen with the promo freebies
+    // checkoutItems is the product that we actually ship to the customer following completion of purchase
+
+    // start by copying the cartItems to become checkoutItems
+    let checkoutItems = Object.assign({}, this.cartItems)
+
+    // go through each item in the checkoutItems and add the freebies if necessary
+    for (let productCode of Object.keys(checkoutItems)) {
+      // second, if there are freebies for this productcode, update the checkout item quantity but not price
+      if (this.pricingRules[productCode].freebiesPer > 0) {
+        // number of freebies is units purchased divided by the freebiesPer in the pricing table, rounded down
+        let unitsFreebies = Math.floor(this.cartItems[productCode].units / this.pricingRules[productCode].freebiesPer)
+        // find what the free product is that the customer is getting
+        let freebieProductCode = this.pricingRules[productCode].freebieProductCode
+        // if the checkoutItems does not already have the freebie product in it then initalize
+        if (!checkoutItems[freebieProductCode]) {checkoutItems[freebieProductCode] = {totalprice: 0, units: 0}}
+        // to add the freebies to the checkoutItems, we update the existing units of this product, or set to number of freebies
+        checkoutItems[freebieProductCode].units = checkoutItems[freebieProductCode].units  + unitsFreebies || unitsFreebies
+      }
+    }
+    // plop it back into the object variable for access by other methods
+    this.checkoutItems = checkoutItems
+  }
+
+  calculateTotalOrderPrice() {
+    // we calculate the price from the cartItems, not the checkoutItems
+    let totalOrderPrice = 0
+    // iterate through each cart item and add its total price to the totalOrderPrice.
+    for (let productCode of Object.keys(this.cartItems)) {totalOrderPrice += this.cartItems[productCode].totalprice}
+    // always apply thew discount calculation, but it will be zero unless a promo code was entered
+    let discountPercentage = promoCodes[this.promoCode] || 0
+    totalOrderPrice = totalOrderPrice  - (totalOrderPrice * discountPercentage / 100)
+    // output as a currency string in Australian dollars
+    return (totalOrderPrice.toLocaleString('en-AU', { style: 'currency',currency: 'AUD', minimumFractionDigits: 2}))
+  }
+
+  total() {
+    return this.calculateTotalOrderPrice()
+  }
+
+  items() {
+    this.buildCheckOutItems()
+    return this.checkoutItems
+  }
+}
+
+var messagesDiv = document.getElementById('messagesDiv')
+function assert( expected, got, description ) {
+    let li = document.createElement('li')
+    //let result = test ? 'pass' : 'fail';
+    let result = (expected === got) ? 'pass' : 'fail'
+    li.appendChild(document.createTextNode( `${description}: expected: ${expected} got: ${got} ${result}`))
+    messagesDiv.appendChild(li)
+};
+
+function test1() {
+  cart = new ShoppingCart(pricingRules)
+  cart.add('ult_small')
+  cart.add('ult_small')
+  cart.add('ult_large')
+  assert('$94.70', cart.total(), 'test scenario 1 - check total is $94.70')
+  let items = cart.items()
+  console.log(items)
+  assert(3, items.ult_small.units, 'test scenario 1 - check ult_small.units === 3')
+  assert(1, items.ult_large.units, 'test scenario 1 - check ult_large.units === 1')
+}
+
+function test2() {
+  cart = new ShoppingCart(pricingRules)
+  cart.add('ult_small')
+  cart.add('ult_small')
+  cart.add('ult_large')
+  cart.add('ult_large')
+  cart.add('ult_large')
+  cart.add('ult_large')
+  assert('$209.40', cart.total(), 'test scenario 2 - check total is $209.40')
+  let items = cart.items()
+  assert(2, items.ult_small.units, 'test scenario 2 - check ult_small.units === 2')
+  assert(4, items.ult_large.units, 'test scenario 2 - check ult_large.units === 4')
+}
+
+function test3() {
+  // test scenario 3:
+  console.log('test scenario 3:')
+  cart = new ShoppingCart(pricingRules)
+  cart.add('ult_small')
+  cart.add('ult_medium')
+  cart.add('ult_medium')
+  console.log(cart.total())
+  console.log(cart.items())
+  assert('$84.70', cart.total(), 'test scenario 3 - check total is $84.70')
+  let items = cart.items()
+  assert(1, items.ult_small.units, 'test scenario 3 - check ult_small.units === 1')
+  assert(2, items.ult_medium.units, 'test scenario 3 - check ult_medium.units === 2')
+  assert(2, items['1gb'].units, 'test scenario 3 - check 1gb.units === 2')
+}
+
+function test4() {
+  cart = new ShoppingCart(pricingRules)
+  cart.add('ult_small')
+  cart.add('1gb', 'I<3AMAYSIM')
+  assert('$31.32', cart.total(), 'test scenario 4 - check total is $31.32')
+  let items = cart.items()
+  assert(1, items.ult_small.units, 'test scenario 4 - check ult_small.units === 1')
+  assert(1, items['1gb'].units, 'test scenario 4 - check 1gb.units === 1')
+}
+
+test1()
+test2()
+test3()
+test4()
+
+</script>
+
